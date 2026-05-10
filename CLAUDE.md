@@ -19,4 +19,4 @@
 - Architecture decision records go in `docs/src/adr/`
 - Archived documents go in `docs/src/archive/`
 - Always update `docs/src/SUMMARY.md` after creating any document under `docs/src/`
-- Personal notes go in `docs/src/notes/`
+- Personal notes go in `docs/src/note/`
