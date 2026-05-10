@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "piper_teleop"
+version = "0.1.0"
+description = "Piper teleoperation debug nodes (bringup + gamepad) for teach-record dataflow"
+requires-python = ">=3.11, <3.12"
+dependencies = [
+    "dora-rs>=0.5.0",
+    "numpy>=1.24",
+    "pyarrow>=23.0.1",
+    "pygame>=2.5",
+    "piper-control>=1.5.0",
+]
+
+[project.scripts]
+piper-bringup = "piper_teleop.bringup:main"
+piper-gamepad = "piper_teleop.gamepad:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+include = ["piper_teleop*"]

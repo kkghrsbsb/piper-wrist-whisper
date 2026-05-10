@@ -1,0 +1,29 @@
+nodes:
+  - id: piper_bringup
+    path: uv
+    args: run piper-bringup
+    inputs:
+      tick: dora/timer/millis/20
+      joint_action:
+        source: piper_gamepad/joint_action
+        queue_size: 1
+      home_request: piper_gamepad/home_request
+      disable_request: piper_gamepad/disable_request
+    outputs:
+      - jointstate
+      - enabled
+      - at_zero
+
+  - id: piper_gamepad
+    path: uv
+    args: run piper-gamepad
+    inputs:
+      enabled: piper_bringup/enabled
+      at_zero: piper_bringup/at_zero
+      jointstate: piper_bringup/jointstate
+      tick: dora/timer/millis/5
+    outputs:
+      - joint_action
+      - home_request
+      - disable_request
+      - record_event

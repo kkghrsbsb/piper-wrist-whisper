@@ -1,0 +1,8 @@
+nodes:
+  - id: piper_bringup
+    path: uv
+    args: run piper-bringup
+    outputs:
+      - jointstate
+      - enabled
+      - at_zero
