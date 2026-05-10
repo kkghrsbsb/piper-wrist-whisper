@@ -1,0 +1,14 @@
+nodes:
+  - id: robot_state_publisher
+    path: uv
+    args: run robot-state-publisher
+    inputs:
+      tick: dora/timer/millis/33
+    outputs:
+      - joint_positions
+
+  - id: rerun_mjcf_viewer
+    path: uv
+    args: run rerun-mjcf-viewer
+    inputs:
+      joint_positions: robot_state_publisher/joint_positions

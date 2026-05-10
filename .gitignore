@@ -1,0 +1,27 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# die
+.vscode/
+.idea/
+
+# mdbook
+book/
+
+# dora record information
+out/
+Log/
+
+# claude code
+.claude/
+
+# others
+MUJOCO_LOG.TXT

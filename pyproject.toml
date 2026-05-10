@@ -1,0 +1,21 @@
+# uv workspace 根配置，本文件不是可安装包，只负责 workspace 管理。
+
+[tool.uv]
+
+# workspace 成员目录，每个 glob 下的子目录须有自己的 pyproject.toml。
+# 新增节点分类：在对应分类目录下建子包即可自动被发现，例如：
+#   nodes/dora_piper_control/pyproject.toml
+# 若节点属于新分类，在此追加一行，例如：
+#   "llm/*"
+[tool.uv.workspace]
+members = ["nodes/*"]
+exclude = ["nodes/dora-pyaudio"] # 暂时排除 dora-pyaudio 节点，来自官方 dora-rs/dora-hub ，作为结构参考
+
+# workspace 内部依赖声明。
+# 当某个子包需要被其他子包 import 时，在此注册，然后在依赖方的
+# pyproject.toml [project.dependencies] 里写包名即可，uv 会自动链接。
+# 新增节点示例：
+#   my_node = { workspace = true }
+[tool.uv.sources]
+rerun_dabai_dc1 = { workspace = true }
+rerun_piper_sim = { workspace = true }

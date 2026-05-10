@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rerun_dabai_dc1"
+version = "0.1.0"
+description = "Orbbec DaBai DC1 dora-rs dataflow nodes"
+readme = "README.md"
+requires-python = ">=3.11, <3.12"
+dependencies = [
+    "dora-rs>=0.5.0",
+    "numpy>=1.24",
+    "opencv-python>=4.11.0.86",
+    "pyarrow>=23.0.1",
+    "pyorbbecsdk",
+    "rerun-sdk>=0.23.1",
+]
+
+[project.scripts]
+orbbec-camera = "rerun_dabai_dc1.orbbec_camera:main"
+rerun-dabai-viewer = "rerun_dabai_dc1.rerun_viewer:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.uv.sources]
+pyorbbecsdk = { path = "dist/pyorbbecsdk-1.3.1-cp311-cp311-linux_x86_64.whl" }

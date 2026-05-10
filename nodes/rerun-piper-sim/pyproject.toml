@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rerun_piper_sim"
+version = "0.1.0"
+requires-python = ">=3.11, <3.12"
+dependencies = [
+    "dora-rs>=0.5.0",
+    "mujoco>=3.3.0",
+    "numpy>=2.0",
+    "pyarrow>=23.0.1",
+    "rerun-sdk>=0.29",
+    "rerun-loader-mjcf>=1.0.1",
+    "piper-control>=1.5.0",
+]
+
+[project.scripts]
+robot-state-publisher = "rerun_piper_sim.robot_state_publisher:main"
+rerun-mjcf-viewer = "rerun_piper_sim.rerun_mjcf_viewer:main"
+mujoco-sim-viewer = "rerun_piper_sim.mujoco_sim_viewer:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+include = ["rerun_piper_sim*"]

@@ -1,0 +1,7 @@
+[book]
+title = "piper-wrist-whisper"
+authors = []
+language = "en"
+
+[output.html]
+git-repository-url = "https://github.com/kkghrsbsb/piper-wrist-whisper"
