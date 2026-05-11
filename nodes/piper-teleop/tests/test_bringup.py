@@ -12,7 +12,9 @@ import pytest
 from piper_teleop import bringup
 from piper_teleop.constants import (
     GRIPPER_EFFORT,
+    INIT_JOINT_POSITION,
     JOINT_LIMITS,
+    JOINT_SAFE_SPEED,
     SAFE_DISABLE_POSITION,
     ZERO_POSITION,
 )
@@ -290,3 +292,131 @@ def test_apply_joint_action_rejects_wrong_shape():
         bringup.apply_joint_action(robot, np.zeros(8, dtype=np.float32))
     robot.command_joint_positions.assert_not_called()
     robot.command_gripper.assert_not_called()
+
+
+# ── main() 事件分支 ─────────────────────────────────────────
+
+
+def _input(eid, value):
+    return {"type": "INPUT", "id": eid, "value": value}
+
+
+def _make_main_env(monkeypatch, events):
+    """共享的 main() 测试夹具:mock 真机连接 + builtin_move + Node。
+
+    返回 (fake_robot, fake_node, move_calls)。
+    """
+    fake_robot = MagicMock()
+    fake_robot.get_joint_positions.return_value = [0.0] * 6
+    fake_robot.get_gripper_state.return_value = (0.0, 0.0)
+
+    monkeypatch.setattr(bringup, "connect_and_enable", lambda: fake_robot)
+
+    move_calls = []
+
+    def fake_move(robot, target, **kwargs):
+        move_calls.append(list(target))
+        return True
+
+    monkeypatch.setattr(bringup, "builtin_move", fake_move)
+    monkeypatch.setattr(bringup, "safe_shutdown", lambda r, **kw: None)
+
+    fake_node = MagicMock()
+    fake_node.__iter__ = MagicMock(return_value=iter(events))
+    monkeypatch.setattr(bringup, "Node", lambda: fake_node)
+
+    return fake_robot, fake_node, move_calls
+
+
+def _outputs_by_id(fake_node):
+    """把 fake_node.send_output 的所有调用按 id 聚合成 {id: [values]}。"""
+    out: dict[str, list] = {}
+    for call in fake_node.send_output.call_args_list:
+        eid = call.args[0]
+        out.setdefault(eid, []).append(call.args[1])
+    return out
+
+
+def test_main_startup_moves_to_zero_and_publishes_at_zero(monkeypatch):
+    """启动校准 → builtin_move(ZERO_POSITION) → publish at_zero。
+
+    零位是 bringup 启动目标(也是 Y 键 home_request 目标)。
+    初始位是预设动作起止位,由 X 键 init_pose_request 触发,启动不去那里。
+    """
+    events = [_input("disable_request", None)]  # 立刻退出主循环
+    fake_robot, fake_node, move_calls = _make_main_env(monkeypatch, events)
+
+    bringup.main()
+
+    # 首次 move 目标是 ZERO_POSITION
+    assert move_calls[0] == list(ZERO_POSITION)
+    outputs = _outputs_by_id(fake_node)
+    # 启动 publish enabled / at_zero / jointstate
+    assert "enabled" in outputs
+    assert "at_zero" in outputs
+    assert "jointstate" in outputs
+    # 启动不该发 at_init_pose(那个只由 init_pose_request 触发)
+    assert "at_init_pose" not in outputs
+
+
+def test_main_init_pose_request_moves_to_init_pose_and_publishes_at_init_pose(
+    monkeypatch,
+):
+    """收到 init_pose_request → builtin_move(INIT_JOINT_POSITION) → publish at_init_pose。"""
+    events = [
+        _input("init_pose_request", None),
+        _input("disable_request", None),
+    ]
+    fake_robot, fake_node, move_calls = _make_main_env(monkeypatch, events)
+
+    bringup.main()
+
+    # 启动 move 到 ZERO,init_pose_request move 到 INIT_JOINT_POSITION
+    assert move_calls[0] == list(ZERO_POSITION)
+    assert list(INIT_JOINT_POSITION) in move_calls
+
+    # 处理完 init_pose_request 后切回 command 模式
+    set_arm_mode_calls = [
+        c for c in fake_robot.set_arm_mode.call_args_list
+        if c.kwargs.get("speed") == JOINT_SAFE_SPEED
+    ]
+    assert len(set_arm_mode_calls) >= 2  # 启动后 + init_pose_request 后
+
+    # 启动 publish at_zero,init_pose_request publish at_init_pose
+    outputs = _outputs_by_id(fake_node)
+    assert len(outputs["at_zero"]) == 1
+    assert len(outputs["at_init_pose"]) == 1
+
+
+def test_main_home_request_moves_to_zero(monkeypatch):
+    """Y 键 home_request 目标是 ZERO_POSITION,publish at_zero。"""
+    events = [
+        _input("home_request", None),
+        _input("disable_request", None),
+    ]
+    fake_robot, fake_node, move_calls = _make_main_env(monkeypatch, events)
+
+    bringup.main()
+
+    # 启动 + home_request 都 move 到 ZERO_POSITION,从不去 INIT_JOINT_POSITION
+    assert list(INIT_JOINT_POSITION) not in move_calls
+    assert all(m == list(ZERO_POSITION) for m in move_calls)
+    # 两次 at_zero(启动 + home_request),没有 at_init_pose
+    outputs = _outputs_by_id(fake_node)
+    assert len(outputs["at_zero"]) == 2
+    assert "at_init_pose" not in outputs
+
+
+def test_main_disable_request_exits_loop(monkeypatch):
+    """disable_request 触发 break,safe_shutdown 在 finally 中调用。"""
+    events = [_input("disable_request", None)]
+    fake_robot, fake_node, move_calls = _make_main_env(monkeypatch, events)
+
+    shutdown_called = []
+    monkeypatch.setattr(
+        bringup, "safe_shutdown", lambda r, **kw: shutdown_called.append(True)
+    )
+
+    bringup.main()
+
+    assert shutdown_called == [True]

@@ -9,10 +9,12 @@ nodes:
         queue_size: 1
       home_request: piper_gamepad/home_request
       disable_request: piper_gamepad/disable_request
+      init_pose_request: piper_gamepad/init_pose_request
     outputs:
       - jointstate
       - enabled
-      - at_zero
+      - at_zero          # 启动 + home_request 到零位后发出
+      - at_init_pose     # init_pose_request 到初始位后发出
 
   - id: piper_gamepad
     path: uv
@@ -20,6 +22,7 @@ nodes:
     inputs:
       enabled: piper_bringup/enabled
       at_zero: piper_bringup/at_zero
+      at_init_pose: piper_bringup/at_init_pose
       jointstate: piper_bringup/jointstate
       tick: dora/timer/millis/5
     outputs:
@@ -27,3 +30,19 @@ nodes:
       - home_request
       - disable_request
       - record_event
+      - init_pose_request
+
+  # 每次录制时由用户在启动 dora 前覆盖 ACTION_ID / ACTION_SPEECH,
+  # 例如: ACTION_ID=wave ACTION_SPEECH="好的|你好" dora start ...
+  - id: teach_recorder
+    path: uv
+    args: run teach-recorder
+    env:
+      ACTION_ID: wave
+      ACTION_SPEECH: "好的|你好|向你打招呼"
+      # dora 把节点 CWD 设为本 YAML 所在目录(dataflow/teleop/),
+      # 这里指向 repo 根的 actions/,所有动作 NPZ 集中存放。
+      ACTIONS_DIR: ../../actions
+    inputs:
+      jointstate: piper_bringup/jointstate
+      at_init_pose: piper_bringup/at_init_pose

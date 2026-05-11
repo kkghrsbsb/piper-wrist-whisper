@@ -75,7 +75,8 @@ def main():
 
     # 来自 piper-bringup 的状态缓存
     enabled = False
-    at_zero = False
+    # ready: 机械臂处于已知位置(零位或初始位),由 at_zero / at_init_pose 任一信号触发
+    ready = False
     current_q = np.array(ZERO_POSITION + [0.0], dtype=np.float32)  # 7 元素
     target_q = np.array(ZERO_POSITION, dtype=np.float32)           # 6 关节
     gripper_pos = 0.0
@@ -84,13 +85,14 @@ def main():
     speed_index = DEFAULT_SPEED_INDEX
     btn_y = ButtonEdge()
     btn_a = ButtonEdge()
+    btn_x = ButtonEdge()
     btn_lb = ButtonEdge()
     btn_rb = ButtonEdge()
 
     # NOTE: record_event 输出在 plan §3.2 中预留,本批次不监听 Start 键、
     # 不实际 publish,留给后续 teach-recorder plan。
 
-    print("piper-gamepad: started, waiting for bringup ready (enabled + at_zero)...")
+    print("piper-gamepad: started, waiting for bringup ready (enabled + at_zero/at_init_pose)...")
 
     for event in node:
         if event["type"] != "INPUT":
@@ -103,13 +105,21 @@ def main():
             print(f"piper-gamepad: enabled={enabled}")
 
         elif eid == "at_zero":
-            at_zero = bool(event["value"][0].as_py())
-            print(f"piper-gamepad: at_zero={at_zero}")
+            ok = bool(event["value"][0].as_py())
+            print(f"piper-gamepad: at_zero={ok}")
+            if ok:
+                ready = True
+
+        elif eid == "at_init_pose":
+            ok = bool(event["value"][0].as_py())
+            print(f"piper-gamepad: at_init_pose={ok}")
+            if ok:
+                ready = True
 
         elif eid == "jointstate":
             current_q = np.asarray(event["value"], dtype=np.float32)
             # 第一次拿到 jointstate 且 bringup ready,初始化 target_q
-            if enabled and at_zero and not target_initialized:
+            if enabled and ready and not target_initialized:
                 target_q = current_q[:6].copy()
                 gripper_pos = float(current_q[6])
                 target_initialized = True
@@ -126,7 +136,7 @@ def main():
                     joystick = None
                     print("piper-gamepad: joystick disconnected")
 
-            if not (enabled and at_zero and target_initialized):
+            if not (enabled and ready and target_initialized):
                 continue
             if joystick is None:
                 continue
@@ -134,6 +144,7 @@ def main():
             # 边沿检测的按键
             y_pressed = btn_y.update(_get_button(joystick, "y"))
             a_pressed = btn_a.update(_get_button(joystick, "a"))
+            x_pressed = btn_x.update(_get_button(joystick, "x"))
             lb_pressed = btn_lb.update(_get_button(joystick, "lb"))
             rb_pressed = btn_rb.update(_get_button(joystick, "rb"))
 
@@ -146,6 +157,13 @@ def main():
                 print("piper-gamepad: Y pressed → home_request")
                 node.send_output("home_request", pa.array([True]))
                 # 让 bringup 接管回零,本节点等下次 jointstate 自动同步 target_q
+                target_initialized = False
+                continue
+
+            if x_pressed:
+                print("piper-gamepad: X pressed → init_pose_request")
+                node.send_output("init_pose_request", pa.array([True]))
+                # bringup 回到初始位后,等下次 jointstate 自动同步 target_q
                 target_initialized = False
                 continue
 

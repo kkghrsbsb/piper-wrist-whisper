@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "teach_recorder"
+version = "0.1.0"
+description = "Teach-mode trajectory recorder: 累积 piper jointstate 并写入 actions/{ACTION_ID}.npz"
+requires-python = ">=3.11, <3.12"
+dependencies = [
+    "dora-rs>=0.5.0",
+    "numpy>=1.24",
+    "pyarrow>=23.0.1",
+]
+
+[project.scripts]
+teach-recorder = "teach_recorder.recorder:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+include = ["teach_recorder*"]

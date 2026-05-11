@@ -5,6 +5,7 @@
 - [方案]()
   - [系统架构基线方案](./plan/2026-05-system-architecture-baseline-plan.md)
   - [手柄遥操调试节点方案](./plan/2026-05-piper-teleop-debug-plan.md)
+  - [轨迹录制节点方案（teach-recorder）](./plan/2026-05-teach-recorder-plan.md)
 
 - [决策记录]()
   - [ADR-001:双模式架构 + 远程 LLM + Web 前端的整体技术选型](./adr/2026-05-001-dual-mode-llm-vlm-architecture.md)

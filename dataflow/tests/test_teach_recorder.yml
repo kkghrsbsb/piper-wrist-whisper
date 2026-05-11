@@ -1,0 +1,21 @@
+# teach-recorder 冒烟 YAML
+#
+# 单独跑这个节点,验证:
+#   1. 环境变量 ACTION_ID / ACTION_SPEECH 缺失时立即报错退出
+#   2. 环境变量齐全时正常启动并进入事件循环(不需真机)
+#
+# 用法:
+#   # 1) 校验缺环境变量退出:
+#   dora run dataflow/tests/test_teach_recorder.yml
+#   # 2) 校验启动正常(手动 Ctrl-C 中止):
+#   ACTION_ID=smoke ACTION_SPEECH="冒烟测试|smoke ok" \
+#       dora run dataflow/tests/test_teach_recorder.yml
+#
+# tick 仅用来保持 dataflow 存活,recorder 不订阅它(未知 eid 静默忽略)。
+
+nodes:
+  - id: teach_recorder
+    path: uv
+    args: run teach-recorder
+    inputs:
+      tick: dora/timer/millis/100

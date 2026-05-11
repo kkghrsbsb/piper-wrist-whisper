@@ -13,6 +13,8 @@ JOINT_LIMITS = [
 ]
 
 ZERO_POSITION = [-1.5708, 0.0, 0.0, 0.0, 0.0, 0.0]
+# 所有预设动作的统一起止位(与 baseline plan §6 的 PIPER_HOME_POSE 6 关节部分一致)
+INIT_JOINT_POSITION = [-1.5708, 0.25, -1.0, 0.0, 0.5, 0.0]
 SAFE_DISABLE_POSITION = [-1.5708, 0.0, 0.0, 0.02, 0.5, 0.0]
 GRIPPER_RANGE = (0.0, 0.1)
 

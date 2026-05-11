@@ -23,6 +23,7 @@ from piper_teleop.constants import (
     ENABLE_PROBE_SAMPLES,
     GRIPPER_EFFORT,
     GRIPPER_RANGE,
+    INIT_JOINT_POSITION,
     JOINT_LIMITS,
     JOINT_SAFE_SPEED,
     MOVE_THRESHOLD,
@@ -140,7 +141,7 @@ def main():
     # BuiltinJointPositionController 退出后切回 command_joint_positions 模式
     robot.set_arm_mode(speed=JOINT_SAFE_SPEED)
 
-    # 通告 ready 状态
+    # 通告 ready 状态:启动到零位 → at_zero
     node.send_output("enabled", pa.array([True]))
     node.send_output("at_zero", pa.array([at_zero]))
     node.send_output("jointstate", pa.array(get_jointstate(robot)))
@@ -164,6 +165,12 @@ def main():
                 # controller 退出后切回 command 模式,后续 joint_action 才能下发
                 robot.set_arm_mode(speed=JOINT_SAFE_SPEED)
                 node.send_output("at_zero", pa.array([ok]))
+
+            elif eid == "init_pose_request":
+                print("piper-bringup: init_pose_request → moving to INIT_JOINT_POSITION")
+                ok = builtin_move(robot, INIT_JOINT_POSITION)
+                robot.set_arm_mode(speed=JOINT_SAFE_SPEED)
+                node.send_output("at_init_pose", pa.array([ok]))
 
             elif eid == "disable_request":
                 print("piper-bringup: disable_request → exiting main loop")

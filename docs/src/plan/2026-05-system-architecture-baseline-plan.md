@@ -288,11 +288,11 @@ USER: [image]
 **轨迹格式**:`actions/{action_id}.npz`
 - `joints: float32 [N, 7]`
 - `dt: float32` 帧间隔
-- `speech: str` 预设播报文本
+- `speech: list[str]` 预设播报文本变体数组(≥1 条),回放时随机选一条
 
 **回放逻辑**
 1. 收到 action_id → 向 supervisor 申请 grant
-2. 拿到 grant → 加载 npz → 立即 publish speech_text → 按 tick 逐帧 publish joint_action
+2. 拿到 grant → 加载 npz → `speech_text = random.choice(npz['speech'])` → 立即 publish speech_text → 按 tick 逐帧 publish joint_action
 3. 期间 drop 新进来的 action_id
 4. 全部 publish 完成 + piper-state 显示真机到位(误差 < 0.02 rad)→ publish done
 5. 总超时 30s
@@ -448,7 +448,7 @@ RERUN_PORT: "9090"
 # piper 安全
 PIPER_ARM_SPEED: "10"             # set_arm_mode(speed=10)
 PIPER_GRIPPER_EFFORT: "0.5"
-PIPER_HOME_POSE: "[0, 1.0, -1.2, 0, -0.6, 0, 0]"  # 7 维:6 关节 + 夹爪
+PIPER_HOME_POSE: "[-1.5708, 0.25, -1.0, 0.0, 0.5, 0.0, 0.0]"  # 7 维:6 关节 + 夹爪(gripper=0.0 自然收口)
 ```
 
 ---

@@ -7,6 +7,7 @@ members = [
     "piper-teleop",
     "rerun-dabai-dc1",
     "rerun-piper-sim",
+    "teach-recorder",
 ]
 
 [[package]]
@@ -485,6 +486,31 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/c1/f5/757fdf4b3b8213c4675505fb8517a42f537280801e6427227643e4a681dc/rerun_sdk-0.31.4-cp310-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:e9ce111ee3b46ffe8b3ae6b6c08db22283995f826215ca37925bdfaef9091cee", size = 135112616, upload-time = "2026-04-28T16:33:43.749Z" },
     { url = "https://files.pythonhosted.org/packages/92/a4/f729f319da6ef072746599ba2aca12a8654c3aec42661e38920e7019741d/rerun_sdk-0.31.4-cp310-abi3-win_amd64.whl", hash = "sha256:82f4f17522be862b8f62361cad8044c0af051147b9de4a6bae4fa50703eef3b2", size = 116466579, upload-time = "2026-04-28T16:33:49.314Z" },
 ]
+
+[[package]]
+name = "teach-recorder"
+version = "0.1.0"
+source = { editable = "nodes/teach-recorder" }
+dependencies = [
+    { name = "dora-rs" },
+    { name = "numpy" },
+    { name = "pyarrow" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "dora-rs", specifier = ">=0.5.0" },
+    { name = "numpy", specifier = ">=1.24" },
+    { name = "pyarrow", specifier = ">=23.0.1" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8" }]
 
 [[package]]
 name = "typing-extensions"
