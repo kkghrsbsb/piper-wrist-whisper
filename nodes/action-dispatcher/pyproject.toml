@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "action_dispatcher"
+version = "0.1.0"
+description = "Replay recorded action NPZ trajectories as dora joint_action frames"
+requires-python = ">=3.11, <3.12"
+dependencies = [
+    "dora-rs>=0.5.0",
+    "numpy>=1.24",
+    "pyarrow>=23.0.1",
+]
+
+[project.scripts]
+action-dispatcher = "action_dispatcher.dispatcher:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+include = ["action_dispatcher*"]

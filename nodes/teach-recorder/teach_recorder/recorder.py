@@ -6,8 +6,11 @@
     收到 at_init_pose=True(用户第 1 次按 X)→ 进入 RECORDING
 
   RECORDING
-    每帧 jointstate 追加 buffer。
-    收到 at_init_pose=True(用户第 2 次按 X)→ 写 NPZ → 退出。
+    每帧 jointstate 追加 buffer 和相对时间戳。
+    收到 at_init_pose=True(用户第 2 次按 X)→ 进入 STOPPING。
+
+  STOPPING
+    继续追加 jointstate,直到看到 INIT_JOINT_POSITION 且至少保持 1 秒后写 NPZ。
 
 注:bringup 启动到 ZERO_POSITION 时只 publish at_zero,不会触发 teach-recorder,
 因此不再需要 startup_consumed 标志。
@@ -26,6 +29,14 @@ import pyarrow as pa
 from dora import Node
 
 DT_SECONDS = 0.02  # 与 bringup 50Hz tick 对应
+SCHEMA_VERSION = 2
+STOP_HOLD_SECONDS = 1.0
+STOPPING_TIMEOUT_SECONDS = 5.0
+INIT_JOINT_ATOL = 0.02
+INIT_JOINT_POSITION = np.array(
+    [-1.5708, 0.25, -1.0, 0.0, 0.5, 0.0],
+    dtype=np.float32,
+)
 
 
 def parse_speech(raw: str) -> list[str]:
@@ -57,6 +68,7 @@ def resolve_output_path(
 def build_npz_payload(
     frames: Iterable[np.ndarray],
     speech_list: list[str],
+    timestamps: Iterable[float] | None = None,
     dt: float = DT_SECONDS,
 ) -> dict:
     """把 buffer 整理成 np.savez 的 kwargs。frames 不能为空。"""
@@ -68,10 +80,27 @@ def build_npz_payload(
         raise ValueError(
             f"frames must be [N, 7], got shape {joints_arr.shape}"
         )
+    if timestamps is None:
+        timestamps_arr = (
+            np.arange(joints_arr.shape[0], dtype=np.float32) * np.float32(dt)
+        )
+    else:
+        timestamps_arr = np.asarray(list(timestamps), dtype=np.float32)
+    if timestamps_arr.shape != (joints_arr.shape[0],):
+        raise ValueError(
+            "timestamps must be [N], "
+            f"got shape {timestamps_arr.shape} for {joints_arr.shape[0]} frames"
+        )
+    if not np.all(np.isfinite(timestamps_arr)):
+        raise ValueError("timestamps contains NaN or Inf")
+    if np.any(np.diff(timestamps_arr) < 0):
+        raise ValueError("timestamps must be monotonic")
     return {
         "joints": joints_arr,
+        "timestamps": timestamps_arr,
         "dt": np.float32(dt),
         "speech": np.array(speech_list),
+        "schema_version": np.int32(SCHEMA_VERSION),
     }
 
 
@@ -84,6 +113,11 @@ def _bool_from_event(value) -> bool:
         return bool(value[0].as_py())
     arr = np.asarray(value)
     return bool(arr.flat[0])
+
+
+def is_near_init_pose(frame: np.ndarray) -> bool:
+    """只用 6 关节判定是否回到 INIT_JOINT_POSITION,夹爪不作为硬约束。"""
+    return bool(np.allclose(frame[:6], INIT_JOINT_POSITION, atol=INIT_JOINT_ATOL))
 
 
 def main():
@@ -109,9 +143,13 @@ def main():
     )
 
     # 状态
-    recording = False
-    stop_received = False
+    state = "WAITING_START"
+    start_time: float | None = None
+    stop_signal_time: float | None = None
+    init_seen = False
+    should_write = False
     frames: list[np.ndarray] = []
+    timestamps: list[float] = []
 
     print("teach-recorder: WAITING_START (press X to start recording)")
 
@@ -119,6 +157,7 @@ def main():
         if event["type"] != "INPUT":
             continue
 
+        now = time.monotonic()
         eid = event["id"]
 
         if eid == "at_init_pose":
@@ -128,45 +167,87 @@ def main():
                 print("teach-recorder: at_init_pose=False, ignored")
                 continue
 
-            if not recording:
-                recording = True
+            if state == "WAITING_START":
+                state = "RECORDING"
+                start_time = now
                 frames = []
+                timestamps = []
                 print("teach-recorder: RECORDING (press X again to stop)")
                 continue
 
-            # recording=True 时再次触发 → 结束并写文件
-            stop_received = True
-            print(f"teach-recorder: stop signal received, frames={len(frames)}")
-            break
+            if state == "RECORDING":
+                state = "STOPPING"
+                stop_signal_time = now
+                init_seen = False
+                print(
+                    "teach-recorder: STOPPING "
+                    f"(waiting for init pose + {STOP_HOLD_SECONDS:.1f}s hold, "
+                    f"frames={len(frames)})"
+                )
+                continue
+
+            # STOPPING 中重复 at_init_pose=True 不改变状态,等待 jointstate 确认末帧。
+            continue
 
         elif eid == "jointstate":
-            if not recording:
+            if state not in {"RECORDING", "STOPPING"}:
                 continue
             arr = np.asarray(event["value"], dtype=np.float32)
             if arr.shape != (7,):
                 print(f"teach-recorder: skip frame with shape {arr.shape}")
                 continue
             frames.append(arr)
+            if start_time is None:
+                raise SystemExit("teach-recorder: internal error: start_time is None")
+            timestamps.append(now - start_time)
 
-    if not stop_received:
+            if state == "STOPPING":
+                if is_near_init_pose(arr):
+                    init_seen = True
+                if stop_signal_time is None:
+                    raise SystemExit(
+                        "teach-recorder: internal error: stop_signal_time is None"
+                    )
+                stopped_for = now - stop_signal_time
+                if init_seen and stopped_for >= STOP_HOLD_SECONDS:
+                    should_write = True
+                    print(
+                        "teach-recorder: stop condition satisfied "
+                        f"(frames={len(frames)}, hold={stopped_for:.2f}s)"
+                    )
+                    break
+                if stopped_for >= STOPPING_TIMEOUT_SECONDS:
+                    should_write = True
+                    print(
+                        "teach-recorder: warning: STOPPING timeout, "
+                        f"init_seen={init_seen}, frames={len(frames)}"
+                    )
+                    break
+
+    if not should_write:
         # 用户未按第 2 次 X 就退出(dataflow 中止 / 事件流耗尽)→ 不写文件
         # 方案 §5.3:"录失败就重录"。
         print(
-            f"teach-recorder: exited without stop signal "
-            f"(recording={recording}, frames={len(frames)}), nothing saved"
+            f"teach-recorder: exited before stop condition "
+            f"(state={state}, frames={len(frames)}), nothing saved"
         )
         return
 
     try:
-        payload = build_npz_payload(frames, speech_list)
+        payload = build_npz_payload(frames, speech_list, timestamps=timestamps)
     except ValueError as e:
         raise SystemExit(f"teach-recorder: {e}")
+
+    if not is_near_init_pose(payload["joints"][-1]):
+        print("teach-recorder: warning: last frame is not near INIT_JOINT_POSITION")
 
     out_path = resolve_output_path(action_id, base_dir)
     np.savez(out_path, **payload)
     print(
         f"teach-recorder: saved {out_path} "
-        f"(N={payload['joints'].shape[0]}, dt={float(payload['dt'])})"
+        f"(N={payload['joints'].shape[0]}, "
+        f"duration={float(payload['timestamps'][-1]):.2f}s, "
+        f"dt={float(payload['dt'])})"
     )
 
 

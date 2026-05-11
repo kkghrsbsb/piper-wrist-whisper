@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dora_piper"
+version = "0.1.0"
+description = "Dora node for writing joint_action frames to a real Piper arm"
+requires-python = ">=3.11, <3.12"
+dependencies = [
+    "dora-rs>=0.5.0",
+    "numpy>=1.24",
+    "pyarrow>=23.0.1",
+    "piper-control>=1.5.0",
+]
+
+[project.scripts]
+dora-piper = "dora_piper.node:main"
+
+[tool.setuptools.packages.find]
+include = ["dora_piper*"]

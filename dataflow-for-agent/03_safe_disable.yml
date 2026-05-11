@@ -1,0 +1,6 @@
+nodes:
+  - id: agent_piper_disable
+    path: uv
+    args: run agent-piper-disable
+    outputs:
+      - disabled

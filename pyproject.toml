@@ -8,7 +8,7 @@
 # 若节点属于新分类，在此追加一行，例如：
 #   "llm/*"
 [tool.uv.workspace]
-members = ["nodes/*"]
+members = ["nodes/*", "nodes-for-agent/*"]
 exclude = ["nodes/dora-pyaudio"] # 暂时排除 dora-pyaudio 节点，来自官方 dora-rs/dora-hub ，作为结构参考
 
 # workspace 内部依赖声明。

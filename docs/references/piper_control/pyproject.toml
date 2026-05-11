@@ -1,0 +1,51 @@
+[project]
+name = "piper_control"
+dynamic = ["version"]
+description = "A wrapper around piper_sdk for controlling AgileX Piper arms."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name="Reimagine Robotics", email="info@reimaginerobotics.ai" },
+]
+dependencies = [
+    "numpy",
+    "packaging",
+    "piper-sdk>=0.2.19",
+]
+
+[project.optional-dependencies]
+gravity = [
+    "mujoco",
+    "scipy",
+]
+
+[project.scripts]
+piper-generate-samples = "piper_control.scripts.generate_samples:main"
+piper-gravity-compensation = "piper_control.scripts.run_gravity_compensation:main"
+piper-set-collision-protection = "piper_control.scripts.set_collision_protection:main"
+
+[project.urls]
+Repository = "https://github.com/Reimagine-Robotics/piper_control"
+
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+backend-path = ["_custom_build_backend"]
+build-backend = "backend"
+
+[tool.setuptools]
+script-files = ["scripts/piper-generate-udev-rule"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+piper_control = ["models/*.xml"]
+
+[dependency-groups]
+dev = [
+  "jupyterlab>=4.4.5",
+  "pre-commit>=4.2.0",
+  "pylint>=3.3.8",
+]

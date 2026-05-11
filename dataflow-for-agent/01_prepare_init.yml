@@ -1,0 +1,9 @@
+nodes:
+  - id: agent_piper_prepare
+    path: uv
+    args: run agent-piper-prepare
+    outputs:
+      - enabled
+      - at_init_pose
+      - jointstate
+      - ready

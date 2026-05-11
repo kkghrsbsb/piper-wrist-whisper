@@ -1,0 +1,17 @@
+nodes:
+  - id: agent_action_replay
+    path: uv
+    args: run agent-action-replay
+    env:
+      # dora start spawns nodes from the daemon, so shell prefixes such as
+      # `ACTION_ID=wave dora start ...` are not inherited by this node.
+      # For another action, change this field or generate an action-specific yml.
+      ACTION_ID: wave
+      ACTIONS_DIR: ../actions
+      REPLAY_TICK_MS: "20"
+      DONE_HOLD_SECONDS: "1.0"
+    outputs:
+      - started
+      - done
+      - at_init_pose
+      - jointstate

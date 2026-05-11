@@ -1,0 +1,11 @@
+name: piper_control
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12
+  - ipykernel
+  - pip
+  - pip:
+    - pyink
+    - -e .

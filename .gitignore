@@ -20,8 +20,12 @@ book/
 out/
 Log/
 
-# claude code
+# agents
 .claude/
+.codex/
 
 # others
 MUJOCO_LOG.TXT
+AGENT_START_HERE.md
+HANDOVER.md
+DEVELOPMENT_HISTORY.md

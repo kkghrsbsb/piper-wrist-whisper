@@ -70,11 +70,20 @@ def test_resolve_output_path_appends_timestamp_on_collision(tmp_path: Path):
 
 def test_build_npz_payload_shapes_and_dtypes():
     frames = [np.full(7, i, dtype=np.float32) for i in range(3)]
-    payload = recorder.build_npz_payload(frames, ["a", "b"])
+    payload = recorder.build_npz_payload(
+        frames,
+        ["a", "b"],
+        timestamps=[0.1, 0.2, 0.3],
+    )
     assert payload["joints"].shape == (3, 7)
     assert payload["joints"].dtype == np.float32
+    np.testing.assert_array_equal(
+        payload["timestamps"],
+        np.array([0.1, 0.2, 0.3], dtype=np.float32),
+    )
     assert float(payload["dt"]) == pytest.approx(0.02)
     assert list(payload["speech"]) == ["a", "b"]
+    assert int(payload["schema_version"]) == 2
 
 
 def test_build_npz_payload_empty_frames_raises():
@@ -86,6 +95,18 @@ def test_build_npz_payload_rejects_wrong_shape():
     frames = [np.zeros(6, dtype=np.float32)]
     with pytest.raises(ValueError, match=r"\[N, 7\]"):
         recorder.build_npz_payload(frames, ["a"])
+
+
+def test_build_npz_payload_rejects_wrong_timestamp_shape():
+    frames = [np.full(7, i, dtype=np.float32) for i in range(3)]
+    with pytest.raises(ValueError, match="timestamps"):
+        recorder.build_npz_payload(frames, ["a"], timestamps=[0.1, 0.2])
+
+
+def test_build_npz_payload_rejects_non_monotonic_timestamps():
+    frames = [np.full(7, i, dtype=np.float32) for i in range(3)]
+    with pytest.raises(ValueError, match="monotonic"):
+        recorder.build_npz_payload(frames, ["a"], timestamps=[0.1, 0.3, 0.2])
 
 
 # ── main() 状态机端到端 ─────────────────────────────────────
@@ -110,16 +131,34 @@ def _frame(v: float):
     return pa.array(np.full(7, v, dtype=np.float32))
 
 
+def _init_frame(gripper: float = 0.0):
+    return pa.array(
+        np.array([*recorder.INIT_JOINT_POSITION, gripper], dtype=np.float32),
+        type=pa.float32(),
+    )
+
+
+def _set_monotonic(monkeypatch, values: list[float]):
+    times = iter(values)
+    monkeypatch.setattr(recorder.time, "monotonic", lambda: next(times))
+
+
 def test_main_full_recording_cycle(tmp_path: Path, monkeypatch):
-    """启动到零位不发 at_init_pose → 第 1 次 X 开始 → 3 帧 → 第 2 次 X 结束 → 写 NPZ。"""
+    """第 2 次 X 后进入 STOPPING,等初始位稳定 1 秒再写 NPZ。"""
     events = [
         _input_event("jointstate", _frame(99.0)),       # 未 recording,丢弃
         _input_event("at_init_pose", _bool_arr(True)),  # 第 1 次 X → 开始
         _input_event("jointstate", _frame(1.0)),
         _input_event("jointstate", _frame(2.0)),
         _input_event("jointstate", _frame(3.0)),
-        _input_event("at_init_pose", _bool_arr(True)),  # 第 2 次 X → 结束
+        _input_event("at_init_pose", _bool_arr(True)),  # 第 2 次 X → STOPPING
+        _input_event("jointstate", _init_frame()),
+        _input_event("jointstate", _init_frame()),
     ]
+    _set_monotonic(
+        monkeypatch,
+        [0.0, 10.0, 10.1, 10.2, 10.3, 10.4, 10.6, 11.5],
+    )
 
     monkeypatch.setenv("ACTION_ID", "wave")
     monkeypatch.setenv("ACTION_SPEECH", "你好|hello")
@@ -132,14 +171,22 @@ def test_main_full_recording_cycle(tmp_path: Path, monkeypatch):
     assert out.exists()
     data = np.load(out)
     np.testing.assert_array_equal(
-        data["joints"],
+        data["joints"][:3],
         np.array(
             [[1.0] * 7, [2.0] * 7, [3.0] * 7],
             dtype=np.float32,
         ),
     )
+    assert data["joints"].shape == (5, 7)
+    np.testing.assert_allclose(data["joints"][-1][:6], recorder.INIT_JOINT_POSITION)
+    np.testing.assert_allclose(
+        data["timestamps"],
+        np.array([0.1, 0.2, 0.3, 0.6, 1.5], dtype=np.float32),
+        atol=1e-6,
+    )
     assert float(data["dt"]) == pytest.approx(0.02)
     assert list(data["speech"]) == ["你好", "hello"]
+    assert int(data["schema_version"]) == 2
 
 
 def test_main_action_speech_missing_exits(tmp_path: Path, monkeypatch):
@@ -163,19 +210,19 @@ def test_main_action_id_missing_exits(tmp_path: Path, monkeypatch):
 
 
 def test_main_empty_recording_refuses_to_write(tmp_path: Path, monkeypatch):
-    """用户按 X 第 1 次后立刻按第 2 次,没有任何 jointstate → 报错退出,不写文件。"""
+    """用户按 X 第 1 次后立刻按第 2 次,没有任何 jointstate → 不写文件。"""
     events = [
         _input_event("at_init_pose", _bool_arr(True)),  # 第 1 次 X
         _input_event("at_init_pose", _bool_arr(True)),  # 第 2 次 X
     ]
+    _set_monotonic(monkeypatch, [1.0, 1.1])
 
     monkeypatch.setenv("ACTION_ID", "wave")
     monkeypatch.setenv("ACTION_SPEECH", "你好")
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(recorder, "Node", lambda: _make_node(events))
 
-    with pytest.raises(SystemExit, match="empty"):
-        recorder.main()
+    recorder.main()
 
     assert not (tmp_path / "actions" / "wave.npz").exists()
 
@@ -186,8 +233,11 @@ def test_main_at_init_pose_false_ignored(tmp_path: Path, monkeypatch):
         _input_event("at_init_pose", _bool_arr(False)),  # move 失败 → 忽略
         _input_event("at_init_pose", _bool_arr(True)),   # 第 1 次 X → 开始
         _input_event("jointstate", _frame(1.0)),
-        _input_event("at_init_pose", _bool_arr(True)),   # 第 2 次 X → 结束
+        _input_event("at_init_pose", _bool_arr(True)),   # 第 2 次 X → STOPPING
+        _input_event("jointstate", _init_frame()),
+        _input_event("jointstate", _init_frame()),
     ]
+    _set_monotonic(monkeypatch, [0.0, 10.0, 10.1, 10.2, 10.4, 11.3])
 
     monkeypatch.setenv("ACTION_ID", "wave")
     monkeypatch.setenv("ACTION_SPEECH", "你好")
@@ -197,7 +247,7 @@ def test_main_at_init_pose_false_ignored(tmp_path: Path, monkeypatch):
     recorder.main()
 
     data = np.load(tmp_path / "actions" / "wave.npz")
-    assert data["joints"].shape == (1, 7)
+    assert data["joints"].shape == (3, 7)
 
 
 def test_main_event_stream_ends_before_stop_does_not_write(
@@ -209,6 +259,7 @@ def test_main_event_stream_ends_before_stop_does_not_write(
         _input_event("jointstate", _frame(1.0)),
         # 没有第 2 次 X,事件流结束
     ]
+    _set_monotonic(monkeypatch, [10.0, 10.1])
 
     monkeypatch.setenv("ACTION_ID", "wave")
     monkeypatch.setenv("ACTION_SPEECH", "你好")
@@ -226,8 +277,11 @@ def test_main_respects_actions_dir_env(tmp_path: Path, monkeypatch):
         _input_event("at_init_pose", _bool_arr(True)),
         _input_event("jointstate", _frame(1.0)),
         _input_event("at_init_pose", _bool_arr(True)),
+        _input_event("jointstate", _init_frame()),
+        _input_event("jointstate", _init_frame()),
     ]
     custom_dir = tmp_path / "custom_actions"
+    _set_monotonic(monkeypatch, [10.0, 10.1, 10.2, 10.4, 11.3])
 
     monkeypatch.setenv("ACTION_ID", "wave")
     monkeypatch.setenv("ACTION_SPEECH", "你好")
@@ -250,7 +304,10 @@ def test_main_collision_appends_timestamp(tmp_path: Path, monkeypatch):
         _input_event("at_init_pose", _bool_arr(True)),  # 第 1 次 X
         _input_event("jointstate", _frame(1.0)),
         _input_event("at_init_pose", _bool_arr(True)),  # 第 2 次 X
+        _input_event("jointstate", _init_frame()),
+        _input_event("jointstate", _init_frame()),
     ]
+    _set_monotonic(monkeypatch, [10.0, 10.1, 10.2, 10.4, 11.3])
 
     monkeypatch.setenv("ACTION_ID", "wave")
     monkeypatch.setenv("ACTION_SPEECH", "你好")

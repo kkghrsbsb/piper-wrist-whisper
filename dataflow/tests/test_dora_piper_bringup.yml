@@ -1,0 +1,10 @@
+nodes:
+  - id: dora_piper
+    path: uv
+    args: run dora-piper
+    inputs:
+      tick: dora/timer/millis/20
+    outputs:
+      - jointstate
+      - enabled
+      - at_init_pose

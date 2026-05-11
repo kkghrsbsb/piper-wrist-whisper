@@ -1,0 +1,25 @@
+nodes:
+  - id: mujoco_sim_test_source
+    path: uv
+    args: run mujoco-sim-test-source
+    inputs:
+      tick: dora/timer/millis/20
+    outputs:
+      - joint_action
+
+  - id: mujoco_sim_publisher
+    path: uv
+    args: run mujoco-sim-publisher
+    inputs:
+      tick: dora/timer/millis/20
+      joint_action:
+        source: mujoco_sim_test_source/joint_action
+        queue_size: 1
+    outputs:
+      - jointstate
+
+  - id: mujoco_sim_viewer
+    path: uv
+    args: run mujoco-sim-viewer
+    inputs:
+      joint_positions: mujoco_sim_publisher/jointstate

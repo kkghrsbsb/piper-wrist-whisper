@@ -1,0 +1,31 @@
+nodes:
+  - id: action_dispatcher
+    path: uv
+    args: run action-dispatcher
+    env:
+      # ACTION_ID is inherited from the dora start environment.
+      # Example: ACTION_ID=wave dora start dataflow/tests/test_action_dispatcher_mujoco.yml --uv
+      ACTIONS_DIR: ../../actions
+    inputs:
+      tick: dora/timer/millis/20
+    outputs:
+      - joint_action
+      - speech_text
+      - done
+
+  - id: mujoco_sim_publisher
+    path: uv
+    args: run mujoco-sim-publisher
+    inputs:
+      tick: dora/timer/millis/20
+      joint_action:
+        source: action_dispatcher/joint_action
+        queue_size: 1
+    outputs:
+      - jointstate
+
+  - id: mujoco_sim_viewer
+    path: uv
+    args: run mujoco-sim-viewer
+    inputs:
+      joint_positions: mujoco_sim_publisher/jointstate

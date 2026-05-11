@@ -1,0 +1,27 @@
+nodes:
+  - id: action_dispatcher
+    path: uv
+    args: run action-dispatcher
+    env:
+      # ACTION_ID is inherited from the dora start environment.
+      # Example: ACTION_ID=wave dora start dataflow/tests/test_action_dispatcher_dora_piper.yml --uv
+      ACTIONS_DIR: ../../actions
+    inputs:
+      tick: dora/timer/millis/20
+    outputs:
+      - joint_action
+      - speech_text
+      - done
+
+  - id: dora_piper
+    path: uv
+    args: run dora-piper
+    inputs:
+      tick: dora/timer/millis/20
+      joint_action:
+        source: action_dispatcher/joint_action
+        queue_size: 1
+    outputs:
+      - jointstate
+      - enabled
+      - at_init_pose
